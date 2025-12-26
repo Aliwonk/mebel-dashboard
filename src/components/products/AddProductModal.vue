@@ -274,7 +274,7 @@ async function onSubmit(event: Event) {
     });
 
     // Отправка данных на сервер
-    const response = await fetch("http://localhost:3000/api/product", {
+    const response = await fetch(BACKEND_API.PRODUCT.CREATE, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${getCookie("token")}`,
