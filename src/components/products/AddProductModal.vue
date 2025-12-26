@@ -2,6 +2,7 @@
 import { onMounted, reactive, ref, watch } from "vue";
 import z from "zod";
 import { getCookie } from "../../utils";
+import { BACKEND_API } from "../../constants/API.constant";
 
 const emit = defineEmits<{
   "update:open": [value: boolean];
@@ -177,9 +178,9 @@ async function loadOptions() {
   try {
     const [categoriesResponse, manufacturersResponse, catalogsResponse] =
       await Promise.all([
-        fetch("http://localhost:3000/api/product/category/all?all=true"),
-        fetch("http://localhost:3000/api/product/manufacturer/all?all=true"),
-        fetch("http://localhost:3000/api/product/catalog/all?all=true"),
+        fetch(`${BACKEND_API.PRODUCT.CATEGORY.GET_ALL}?all=true`),
+        fetch(`${BACKEND_API.PRODUCT.CATALOG.GET_ALL}?all=true`),
+        fetch(`${BACKEND_API.PRODUCT.MANUFACTURER.GET_ALL}?all=true`),
       ]);
 
     if (categoriesResponse.ok) {

@@ -10,6 +10,18 @@ const BACKEND_API = {
     CREATE: `${SERVER_URL}/product`,
     GET_ONE: `${SERVER_URL}/product`,
     GET_ALL: `${SERVER_URL}/product/all`,
+    CATEGORY: {
+      GET_ONE: `${SERVER_URL}/product/category`,
+      GET_ALL: `${SERVER_URL}/product/category/all`,
+    },
+    CATALOG: {
+      GET_ONE: `${SERVER_URL}/product/catalog`,
+      GET_ALL: `${SERVER_URL}/product/catalog/all`,
+    },
+    MANUFACTURER: {
+      GET_ONE: `${SERVER_URL}/product/manufacturer`,
+      GET_ALL: `${SERVER_URL}/product/manufacturer/all`,
+    },
   },
 };
 

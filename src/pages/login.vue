@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { setCookie } from "../utils";
 import { authStore } from "../store";
+import { BACKEND_API } from "../constants/API.constant";
 
 const toast = useToast();
 const formData = ref({
@@ -10,16 +11,13 @@ const formData = ref({
 });
 
 async function handleSubmit() {
-  const response: Response = await fetch(
-    "http://localhost:3000/api/auth/login",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(formData.value),
-    }
-  );
+  const response: Response = await fetch(BACKEND_API.ADMIN.LOGIN, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(formData.value),
+  });
   const data = await response.json();
   if (!response.ok) {
     toast.add({
