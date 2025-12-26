@@ -1,4 +1,4 @@
-const SERVER_URL: string = "https://api.mebelmodnostilno.ru";
+const SERVER_URL: string = "https://api.mebelmodnostilno.ru/api";
 const BACKEND_API = {
   ADMIN: {
     CREATE: `${SERVER_URL}/auth/register`,
