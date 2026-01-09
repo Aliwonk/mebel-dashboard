@@ -82,3 +82,23 @@ export interface Range {
   start: Date;
   end: Date;
 }
+
+export interface Phone {
+  id: number;
+  phone: string;
+  name: string;
+  isMain: boolean;
+}
+
+export interface Email {
+  id: number;
+  email: string;
+  name: string;
+  isMain: boolean;
+}
+
+export interface Address {
+  id: number;
+  address: string;
+  hours: string;
+}

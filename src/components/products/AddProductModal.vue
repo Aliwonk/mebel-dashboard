@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from "vue";
+import { reactive, ref } from "vue";
 import z from "zod";
 import { getCookie } from "../../utils";
 import { BACKEND_API } from "../../constants/API.constant";
