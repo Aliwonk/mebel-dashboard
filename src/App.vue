@@ -30,14 +30,14 @@ const links = [
         open.value = false;
       },
     },
-    {
-      label: "Телеграм",
-      icon: "i-lucide-bot",
-      to: "/telegram",
-      onSelect: () => {
-        open.value = false;
-      },
-    },
+    // {
+    //   label: "Телеграм",
+    //   icon: "i-lucide-bot",
+    //   to: "/telegram",
+    //   onSelect: () => {
+    //     open.value = false;
+    //   },
+    // },
     {
       label: "Администраторы",
       icon: "i-lucide-users",

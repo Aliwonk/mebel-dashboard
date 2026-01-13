@@ -1,102 +1,215 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { mainPageStore } from "../store";
 import { Address, Email, Phone } from "../types";
 import { BACKEND_API } from "../constants/API.constant";
+import { getCookie } from "../utils";
 
 const phones = ref<Array<Phone>>([]);
 const emails = ref<Array<Email>>([]);
 const addresses = ref<Array<Address>>([]);
+const loading = ref({
+  phones: false,
+  emails: false,
+  addresses: false,
+});
 
+// Функция для добавления элемента
 function addElement(type: "phone" | "email" | "address") {
   mainPageStore.modal.open = true;
   mainPageStore.modal.type = "create";
+  mainPageStore.modal.data = { type };
 
   switch (type) {
     case "phone":
       mainPageStore.modal.title = "Добавить телефон";
-      mainPageStore.modal.data = { type: "phone" };
       break;
     case "email":
       mainPageStore.modal.title = "Добавить почту";
-      mainPageStore.modal.data = { type: "email" };
       break;
     case "address":
       mainPageStore.modal.title = "Добавить адрес";
-      mainPageStore.modal.data = { type: "address" };
-      break;
-    default:
-      mainPageStore.modal.title = "Добавить данные";
-      mainPageStore.modal.data = { type: null };
       break;
   }
 }
 
+// Функция для редактирования элемента
 function selectElement(
   data: Phone | Email | Address,
   type: "phone" | "email" | "address"
 ) {
   mainPageStore.modal.open = true;
   mainPageStore.modal.type = "edit";
+  mainPageStore.modal.data = { ...data, type };
 
   switch (type) {
     case "phone":
       mainPageStore.modal.title = "Редактировать телефон";
-      mainPageStore.modal.data = { type: "phone", ...data };
       break;
     case "email":
       mainPageStore.modal.title = "Редактировать почту";
-      mainPageStore.modal.data = { type: "email", ...data };
       break;
     case "address":
       mainPageStore.modal.title = "Редактировать адрес";
-      mainPageStore.modal.data = { type: "address", ...data };
-      break;
-    default:
-      mainPageStore.modal.title = "Редактировать данные";
-      mainPageStore.modal.data = { type: null, ...data };
       break;
   }
 }
 
-function deleteElement(data: Phone | Email | Address) {
-  console.log(data);
-}
+// Функция для удаления элемента
+async function deleteElement(
+  data: Phone | Email | Address,
+  type: "phone" | "email" | "address"
+) {
+  if (!confirm("Вы уверены, что хотите удалить этот элемент?")) {
+    return;
+  }
 
-async function loadData(type: "PHONE" | "EMAIL" | "ADDRESS") {
-  const response = await fetch(BACKEND_API.STORE[type].GET_ALL, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-  const result = await response.json();
+  try {
+    let endpoint = "";
+    let id = data.id;
 
-  if (response.ok) {
     switch (type) {
-      case "PHONE":
-        phones.value = result.data;
+      case "phone":
+        endpoint = `${BACKEND_API.STORE.PHONE.DELETE}/${id}`;
         break;
-      case "EMAIL":
-        emails.value = result.data;
+      case "email":
+        endpoint = `${BACKEND_API.STORE.EMAIL.DELETE}/${id}`;
         break;
-      case "ADDRESS":
-        addresses.value = result.data;
+      case "address":
+        endpoint = `${BACKEND_API.STORE.ADDRESS.DELETE}/${id}`;
         break;
     }
-    console.log(result.data);
+
+    const response = await fetch(endpoint, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${getCookie("token")}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (response.ok) {
+      // Удаляем элемент из локального массива
+      switch (type) {
+        case "phone":
+          phones.value = phones.value.filter((p) => p.id !== id);
+          break;
+        case "email":
+          emails.value = emails.value.filter((e) => e.id !== id);
+          break;
+        case "address":
+          addresses.value = addresses.value.filter((a) => a.id !== id);
+          break;
+      }
+
+      // Показываем уведомление об успехе
+      showNotification("success", "Элемент успешно удален");
+    } else {
+      const error = await response.json();
+      throw new Error(error.message || "Ошибка при удалении");
+    }
+  } catch (error) {
+    console.error("Ошибка при удалении:", error);
+    showNotification(
+      "error",
+      error instanceof Error ? error.message : "Ошибка при удалении"
+    );
+  }
+}
+
+// Функция для загрузки данных
+async function loadData(type: "PHONE" | "EMAIL" | "ADDRESS") {
+  try {
+    switch (type) {
+      case "PHONE":
+        loading.value.phones = true;
+        break;
+      case "EMAIL":
+        loading.value.emails = true;
+        break;
+      case "ADDRESS":
+        loading.value.addresses = true;
+        break;
+    }
+
+    const response = await fetch(BACKEND_API.STORE[type].GET_ALL, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    switch (type) {
+      case "PHONE":
+        phones.value = result.data || [];
+        break;
+      case "EMAIL":
+        emails.value = result.data || [];
+        break;
+      case "ADDRESS":
+        addresses.value = result.data || [];
+        break;
+    }
+  } catch (error) {
+    console.error(`Ошибка при загрузке ${type}:`, error);
+    showNotification("error", `Ошибка при загрузке данных`);
+  } finally {
+    switch (type) {
+      case "PHONE":
+        loading.value.phones = false;
+        break;
+      case "EMAIL":
+        loading.value.emails = false;
+        break;
+      case "ADDRESS":
+        loading.value.addresses = false;
+        break;
+    }
+  }
+}
+
+// Функция для показа уведомлений
+function showNotification(type: "success" | "error", message: string) {
+  // Здесь можно использовать ваш UI компонент для уведомлений
+  // Например, если используется Nuxt UI:
+  // useToast().add({ title: message, color: type === 'success' ? 'green' : 'red' })
+
+  // Временно используем alert
+  alert(message);
+}
+
+// Обработчик события после сохранения из модального окна
+function handleSaved(type: "phone" | "email" | "address") {
+  switch (type) {
+    case "phone":
+      loadData("PHONE");
+      break;
+    case "email":
+      loadData("EMAIL");
+      break;
+    case "address":
+      loadData("ADDRESS");
+      break;
   }
 }
 
 onMounted(async () => {
-  await loadData("EMAIL");
-  await loadData("PHONE");
-  await loadData("ADDRESS");
+  await Promise.all([
+    loadData("EMAIL"),
+    loadData("PHONE"),
+    loadData("ADDRESS"),
+  ]);
 });
 </script>
 
 <template>
-  <ModalFormStoreInf />
+  <ModalFormStoreInf @saved="handleSaved" />
   <UDashboardPanel id="home">
     <template #header>
       <UDashboardNavbar title="Главная" :ui="{ right: 'gap-3' }">
@@ -146,19 +259,27 @@ onMounted(async () => {
                     style="cursor: pointer"
                     :ui="{ icon: 'w-4 h-4' }"
                     @click="addElement('phone')"
+                    :loading="loading.phones"
                   />
                 </div>
               </template>
 
+              <div v-if="loading.phones" class="text-center py-4">
+                <UIcon
+                  name="i-lucide-loader-2"
+                  class="w-6 h-6 animate-spin mx-auto"
+                />
+              </div>
+
               <div
                 class="flex items-center justify-between p-3 mb-3 rounded-lg hover:bg-gray-800 transition-colors"
-                v-if="phones.length > 0"
+                v-else-if="phones.length > 0"
                 v-for="phone in phones"
                 :key="phone.id"
-                style="cursor: pointer"
               >
                 <div
                   class="flex flex-1 items-center"
+                  style="cursor: pointer"
                   @click="selectElement(phone, 'phone')"
                 >
                   <div class="flex w-full items-center gap-3">
@@ -192,9 +313,11 @@ onMounted(async () => {
                     rounded: 'rounded-full',
                   }"
                   style="cursor: pointer"
+                  @click="deleteElement(phone, 'phone')"
+                  :loading="loading.phones"
                 />
               </div>
-              <p v-else>Данные отсутствуют</p>
+              <p v-else-if="!loading.phones">Данные отсутствуют</p>
             </UCard>
 
             <!-- Электронная почта -->
@@ -214,19 +337,27 @@ onMounted(async () => {
                     style="cursor: pointer"
                     :ui="{ icon: 'w-4 h-4' }"
                     @click="addElement('email')"
+                    :loading="loading.emails"
                   />
                 </div>
               </template>
 
+              <div v-if="loading.emails" class="text-center py-4">
+                <UIcon
+                  name="i-lucide-loader-2"
+                  class="w-6 h-6 animate-spin mx-auto"
+                />
+              </div>
+
               <div
                 class="flex items-center justify-between p-3 mb-3 rounded-lg hover:bg-gray-800 transition-colors"
-                v-if="emails.length > 0"
+                v-else-if="emails.length > 0"
                 v-for="email in emails"
                 :key="email.id"
-                style="cursor: pointer"
               >
                 <div
                   class="flex flex-1 items-center"
+                  style="cursor: pointer"
                   @click="selectElement(email, 'email')"
                 >
                   <div class="flex w-full items-center gap-3">
@@ -260,9 +391,11 @@ onMounted(async () => {
                     rounded: 'rounded-full',
                   }"
                   style="cursor: pointer"
+                  @click="deleteElement(email, 'email')"
+                  :loading="loading.emails"
                 />
               </div>
-              <p v-else>Данные отсутствуют</p>
+              <p v-else-if="!loading.emails">Данные отсутствуют</p>
             </UCard>
 
             <!-- Адреса -->
@@ -285,22 +418,27 @@ onMounted(async () => {
                     style="cursor: pointer"
                     :ui="{ icon: 'w-4 h-4' }"
                     @click="addElement('address')"
+                    :loading="loading.addresses"
                   />
                 </div>
               </template>
 
-              <div
-                class="space-y-4"
-                v-if="addresses.length > 0"
-                v-for="address in addresses"
-                :key="address.id"
-                style="cursor: pointer"
-              >
+              <div v-if="loading.addresses" class="text-center py-4">
+                <UIcon
+                  name="i-lucide-loader-2"
+                  class="w-6 h-6 animate-spin mx-auto"
+                />
+              </div>
+
+              <div class="space-y-4" v-else-if="addresses.length > 0">
                 <div
                   class="flex items-center justify-between p-4 mb-4 rounded-lg border border-gray-800 hover:bg-gray-800 transition-all"
+                  v-for="address in addresses"
+                  :key="address.id"
                 >
                   <div
                     class="flex w-full flex-row items-center justify-between space-y-2 gap-10"
+                    style="cursor: pointer"
                     @click="selectElement(address, 'address')"
                   >
                     <div class="address-body">
@@ -333,34 +471,14 @@ onMounted(async () => {
                       rounded: 'rounded-full',
                     }"
                     style="cursor: pointer"
+                    @click="deleteElement(address, 'address')"
+                    :loading="loading.addresses"
                   />
                 </div>
               </div>
-              <p v-else>Данные отсутствуют</p>
+              <p v-else-if="!loading.addresses">Данные отсутствуют</p>
             </UCard>
           </div>
-
-          <!-- Дополнительные действия -->
-          <!-- <div class="flex flex-wrap gap-3 pt-4 border-t">
-            <UButton
-              color="primary"
-              variant="solid"
-              icon="i-lucide-pencil"
-              label="Редактировать информацию"
-            />
-            <UButton
-              color="gray"
-              variant="outline"
-              icon="i-lucide-share-2"
-              label="Поделиться контактами"
-            />
-            <UButton
-              color="gray"
-              variant="outline"
-              icon="i-lucide-printer"
-              label="Распечатать визитку"
-            />
-          </div> -->
         </div>
       </UPageCard>
     </template>

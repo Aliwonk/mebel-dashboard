@@ -11,9 +11,10 @@ export interface Admin {
 }
 
 export interface ProductDimension {
-  id: number;
+  id?: number;
   length: number;
   width: number;
+  height: number;
   weight: number;
   depth: number;
 }
@@ -30,10 +31,13 @@ export interface Product {
   name: string;
   price: string;
   quantity: number;
+  description: string;
+  telegram_notification: boolean;
   categories: Array<{ id: number; name: string }>;
   manufacturers: Array<{ id: number; name: string }>;
   dimensions: Array<ProductDimension>;
   images: Array<ProductImage>;
+  catalogs: Array<{ id: number; name: string }>;
 }
 
 export interface Mail {

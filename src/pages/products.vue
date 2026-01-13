@@ -13,6 +13,7 @@ import {
 } from "vue";
 import { BACKEND_API } from "../constants/API.constant";
 import { getPaginationRowModel } from "@tanstack/table-core";
+import { getCookie } from "../utils";
 
 const UBadge = resolveComponent("UBadge");
 const UButton = resolveComponent("UButton");
@@ -28,6 +29,10 @@ const pagination = ref({
   pageSize: 12,
 });
 const searchQuery = ref<string>("");
+
+// Состояние модального окна
+const isProductModalOpen = ref(false);
+const editingProductId = ref<number | null>(null);
 
 // Фильтрация данных по поисковому запросу
 const filteredProducts = computed(() => {
@@ -183,6 +188,7 @@ function getRowItems(row: Row<Product>) {
   ];
 }
 
+// Загрузка товаров
 async function fetchProducts() {
   fetchingProduct.value = true;
   try {
@@ -199,17 +205,69 @@ async function fetchProducts() {
     }
   } catch (error) {
     console.error("Ошибка при загрузке товаров:", error);
+    showNotification("error", "Ошибка при загрузке товаров");
   } finally {
     fetchingProduct.value = false;
   }
 }
 
+// Редактирование товара
 function editProduct(id: number) {
-  console.log("Редактировать товар:", id);
+  editingProductId.value = id;
+  isProductModalOpen.value = true;
 }
 
-function deleteProduct(id: number) {
-  console.log("Удалить товар:", id);
+// Удаление товара
+async function deleteProduct(id: number) {
+  if (!confirm("Вы уверены, что хотите удалить этот товар?")) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${BACKEND_API.PRODUCT.GET_ONE}/${id}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getCookie("token")}`,
+      },
+    });
+
+    if (response.ok) {
+      // Удаляем товар из списка
+      allProducts.value = allProducts.value.filter(
+        (product) => product.id !== id
+      );
+      showNotification("success", "Товар успешно удален");
+    } else {
+      const error = await response.json();
+      throw new Error(error.message || "Ошибка при удалении товара");
+    }
+  } catch (error) {
+    console.error("Ошибка при удалении товара:", error);
+    showNotification(
+      "error",
+      error instanceof Error ? error.message : "Ошибка при удалении товара"
+    );
+  }
+}
+
+// Создание нового товара
+function createProduct() {
+  editingProductId.value = null;
+  isProductModalOpen.value = true;
+}
+
+// Обработчик успешного сохранения
+function handleProductSuccess() {
+  fetchProducts(); // Перезагружаем список товаров
+}
+
+// Функция для показа уведомлений
+function showNotification(type: "success" | "error", message: string) {
+  const event = new CustomEvent("show-notification", {
+    detail: { type, message },
+  });
+  window.dispatchEvent(event);
 }
 
 onMounted(async () => {
@@ -218,6 +276,14 @@ onMounted(async () => {
 </script>
 
 <template>
+  <!-- Модальное окно товара -->
+  <AddProductModal
+    v-model:open="isProductModalOpen"
+    :product-id="editingProductId"
+    @success="handleProductSuccess"
+    @refresh="fetchProducts"
+  />
+
   <UDashboardPanel id="products">
     <template #header>
       <UDashboardNavbar title="Список товаров">
@@ -226,7 +292,11 @@ onMounted(async () => {
         </template>
 
         <template #right>
-          <AddProductModal />
+          <UButton
+            label="Добавить товар"
+            icon="i-lucide-plus"
+            @click="createProduct"
+          />
         </template>
       </UDashboardNavbar>
     </template>
@@ -297,6 +367,12 @@ onMounted(async () => {
                     : "Начните добавлять товары, чтобы они появились здесь."
                 }}
               </p>
+              <UButton
+                v-if="!searchQuery"
+                label="Добавить товар"
+                icon="i-lucide-plus"
+                @click="createProduct"
+              />
             </div>
           </template>
         </UTable>
@@ -328,6 +404,13 @@ onMounted(async () => {
           <p v-if="searchQuery" class="text-sm text-gray-400 mt-1">
             Попробуйте изменить поисковый запрос
           </p>
+          <UButton
+            v-if="!searchQuery"
+            label="Добавить товар"
+            icon="i-lucide-plus"
+            class="mt-4"
+            @click="createProduct"
+          />
         </div>
       </div>
     </template>

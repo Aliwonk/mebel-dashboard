@@ -1,13 +1,29 @@
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { reactive, ref, watch, computed } from "vue";
 import z from "zod";
 import { getCookie } from "../../utils";
 import { BACKEND_API } from "../../constants/API.constant";
+import type { Product } from "../../types";
+
+const props = defineProps<{
+  productId?: number | null;
+}>();
 
 const emit = defineEmits<{
   "update:open": [value: boolean];
   success: [];
+  refresh: [];
 }>();
+
+// Состояние окна
+const isOpen = defineModel<boolean>("open", { default: false });
+const isEditMode = computed(() => !!props.productId);
+const modalTitle = computed(() =>
+  isEditMode.value ? "Редактировать товар" : "Создать товар"
+);
+const submitButtonText = computed(() =>
+  isEditMode.value ? "Сохранить изменения" : "Добавить товар"
+);
 
 // Схема валидации
 const schema = z.object({
@@ -22,30 +38,9 @@ const schema = z.object({
     })
     .positive("Цена должна быть положительной"),
   description: z.string().optional(),
-  catalog_id: z
-    .number({
-      error: "Поле обязательно для заполнения",
-    })
-    .int("ID каталога должен быть целым числом")
-    .positive("ID каталога должен быть положительным")
-    .optional(),
-  category_id: z
-    .number({
-      error: "Поле обязательно для заполнения",
-    })
-    .int("ID категории должен быть целым числом")
-    .positive("ID категории должен быть положительным")
-    .optional(),
-  manufacturer_id: z
-    .number({
-      error: "Поле обязательно для заполнения",
-    })
-    .int("ID производителя должен быть целым числом")
-    .positive("ID производителя должен быть положительным")
-    .optional(),
   telegram_notification: z.boolean().optional(),
   dimensions: z.object({
-    lenght: z // Исправлено на lenght (согласно примеру сервера)
+    lenght: z
       .number({
         error: "Поле обязательно для заполнения",
       })
@@ -76,66 +71,48 @@ const schema = z.object({
       .nonnegative("Вес не может быть отрицательной")
       .default(0),
   }),
-  catalog: z
-    .object({
-      name: z.string().min(1, "Название каталога обязательно"),
+  catalog_id: z
+    .number({
+      error: "Поле обязательно для заполнения",
     })
+    .int("ID каталога должен быть целым числом")
+    .positive("ID каталога должен быть положительным")
     .optional(),
-  category: z
-    .object({
-      name: z.string().min(1, "Название категории обязательно"),
+  category_id: z
+    .number({
+      error: "Поле обязательно для заполнения",
     })
+    .int("ID категории должен быть целым числом")
+    .positive("ID категории должен быть положительным")
     .optional(),
-  manufacturer: z
-    .object({
-      name: z.string().min(1, "Название производителя обязательно"),
+  manufacturer_id: z
+    .number({
+      error: "Поле обязательно для заполнения",
     })
+    .int("ID производителя должен быть целым числом")
+    .positive("ID производителя должен быть положительным")
     .optional(),
 });
 
-type Schema = z.output<typeof schema>;
-
-type FormData = {
-  name?: string;
-  price: number;
-  description?: string;
-  telegram_notification?: boolean;
-  dimensions: {
-    lenght: number;
-    width: number;
-    height: number;
-    depth: number;
-  };
-  catalog?: { name: string };
-  catalog_id?: number;
-  category?: { name: string };
-  category_id?: number;
-  manufacturer?: { name: string };
-  manufacturer_id?: number;
-};
-
 // Инициализация состояния
-const state = reactive<Partial<Schema>>({
-  name: undefined,
-  price: undefined,
-  description: undefined,
-  catalog_id: undefined,
-  category_id: undefined,
-  manufacturer_id: undefined,
+const state = reactive({
+  name: "",
+  price: 0,
+  description: "",
   telegram_notification: false,
   dimensions: {
-    lenght: 0,
+    length: 0,
     width: 0,
     height: 0,
     depth: 0,
     weight: 0,
   },
-  catalog: undefined,
-  category: undefined,
-  manufacturer: undefined,
+  catalog_id: undefined as number | undefined,
+  category_id: undefined as number | undefined,
+  manufacturer_id: undefined as number | undefined,
 });
 
-// Для загрузки данных выпадающих списков
+// Данные для выпадающих списков
 const catalog = ref<{
   id: number | undefined;
   name: string | undefined;
@@ -170,7 +147,9 @@ const categories = ref<Array<{ id: number; name: string }>>([]);
 const manufacturers = ref<Array<{ id: number; name: string }>>([]);
 const catalogs = ref<Array<{ id: number; name: string }>>([]);
 const loading = ref(false);
-const images = ref<File[]>([]); // Для хранения выбранных изображений
+const images = ref<File[]>([]);
+const existingImages = ref<Array<{ id: number; url: string }>>([]);
+const imagesToDelete = ref<number[]>([]);
 
 // Загрузка данных для выпадающих списков
 async function loadOptions() {
@@ -185,25 +164,192 @@ async function loadOptions() {
 
     if (categoriesResponse.ok) {
       const result = await categoriesResponse.json();
-      categories.value = result.data;
+      categories.value = result.data || [];
     }
 
     if (manufacturersResponse.ok) {
       const result = await manufacturersResponse.json();
-      manufacturers.value = result.data;
+      manufacturers.value = result.data || [];
     }
 
     if (catalogsResponse.ok) {
       const result = await catalogsResponse.json();
-      catalogs.value = result.data;
+      catalogs.value = result.data || [];
     }
-
-    console.log(catalogs);
   } catch (error) {
     console.error("Ошибка при загрузке опций:", error);
   } finally {
     loading.value = false;
   }
+}
+
+// Загрузка данных товара для редактирования
+async function loadProductData(productId: number) {
+  loading.value = true;
+  try {
+    const response = await fetch(`${BACKEND_API.PRODUCT.GET_ONE}/${productId}`);
+    if (response.ok) {
+      const result = await response.json();
+      const product: Product = result.data;
+
+      // Заполняем форму данными товара
+      state.name = product.name;
+      state.price = Number(product.price);
+      state.description = product.description || "";
+      state.telegram_notification = product.telegram_notification || false;
+      state.dimensions =
+        product.dimensions && product.dimensions.length > 0
+          ? product.dimensions[0]
+          : {
+              length: 0,
+              width: 0,
+              height: 0,
+              depth: 0,
+              weight: 0,
+            };
+
+      // Устанавливаем ID категорий, производителей и каталогов
+      if (product.categories && product.categories.length > 0) {
+        state.category_id = product.categories[0].id;
+        category.value = {
+          id: product.categories[0].id,
+          name: product.categories[0].name,
+          new: false,
+        };
+      }
+
+      if (product.manufacturers && product.manufacturers.length > 0) {
+        state.manufacturer_id = product.manufacturers[0].id;
+        manufacturer.value = {
+          id: product.manufacturers[0].id,
+          name: product.manufacturers[0].name,
+          new: false,
+        };
+      }
+
+      if (product.catalogs && product.catalogs.length > 0) {
+        state.catalog_id = product.catalogs[0].id;
+        catalog.value = {
+          id: product.catalogs[0].id,
+          name: product.catalogs[0].name,
+          new: false,
+        };
+      }
+
+      // Сохраняем существующие изображения
+      existingImages.value = product.images || [];
+    }
+  } catch (error) {
+    console.error("Ошибка при загрузке данных товара:", error);
+  } finally {
+    loading.value = false;
+  }
+}
+
+// Сброс формы
+function resetForm() {
+  Object.assign(state, {
+    name: "",
+    price: 0,
+    description: "",
+    telegram_notification: false,
+    dimensions: {
+      lenght: 0,
+      width: 0,
+      height: 0,
+      depth: 0,
+      weight: 0,
+    },
+    catalog_id: undefined,
+    category_id: undefined,
+    manufacturer_id: undefined,
+  });
+
+  images.value = [];
+  existingImages.value = [];
+  imagesToDelete.value = [];
+
+  catalog.value = { id: undefined, name: undefined, new: false };
+  category.value = { id: undefined, name: undefined, new: false };
+  manufacturer.value = { id: undefined, name: undefined, new: false };
+}
+
+// Обработчик открытия модального окна
+watch(isOpen, async (value) => {
+  if (value) {
+    await loadOptions();
+    if (props.productId) {
+      await loadProductData(props.productId);
+    } else {
+      resetForm();
+    }
+  }
+});
+
+// Удаление существующего изображения
+function deleteExistingImage(imageId: number) {
+  imagesToDelete.value.push(imageId);
+  existingImages.value = existingImages.value.filter(
+    (img) => img.id !== imageId
+  );
+}
+
+// Подготовка данных для отправки
+function prepareFormData() {
+  const formData = new FormData();
+
+  // Основные поля
+  formData.append("name", state.name);
+  formData.append("price", state.price.toString());
+  if (state.description) {
+    formData.append("description", state.description);
+  }
+  formData.append(
+    "telegram_notification",
+    state.telegram_notification.toString()
+  );
+
+  // Габариты
+  formData.append("dimensions", JSON.stringify(state.dimensions));
+
+  // ID категорий, производителей и каталогов
+  if (state.category_id) {
+    formData.append("category_id", state.category_id.toString());
+  }
+  if (state.manufacturer_id) {
+    formData.append("manufacturer_id", state.manufacturer_id.toString());
+  }
+  if (state.catalog_id) {
+    formData.append("catalog_id", state.catalog_id.toString());
+  }
+
+  // Новые изображения
+  images.value.forEach((file, index) => {
+    formData.append("images", file);
+  });
+
+  // ID изображений для удаления (только в режиме редактирования)
+  if (isEditMode.value && imagesToDelete.value.length > 0) {
+    formData.append("images_to_delete", JSON.stringify(imagesToDelete.value));
+  }
+
+  // Новые категории/производители/каталоги
+  if (category.value.new && category.value.name) {
+    formData.append("category", JSON.stringify({ name: category.value.name }));
+  }
+
+  if (manufacturer.value.new && manufacturer.value.name) {
+    formData.append(
+      "manufacturer",
+      JSON.stringify({ name: manufacturer.value.name })
+    );
+  }
+
+  if (catalog.value.new && catalog.value.name) {
+    formData.append("catalog", JSON.stringify({ name: catalog.value.name }));
+  }
+
+  return formData;
 }
 
 // Обработчик отправки формы
@@ -212,151 +358,88 @@ async function onSubmit(event: Event) {
   loading.value = true;
 
   try {
-    // Подготовка данных
-    const formData: FormData = {
-      name: state.name,
-      price: Number(state.price),
-      description: state.description,
-      telegram_notification: state.telegram_notification,
-      dimensions: {
-        lenght: Number(state.dimensions?.lenght),
-        width: Number(state.dimensions?.width),
-        height: Number(state.dimensions?.height),
-        depth: Number(state.dimensions?.depth),
-      },
-    };
-
-    // Обработка каталога
-    if (catalog.value.new && catalog.value.name) {
-      formData.catalog = { name: catalog.value.name };
-    } else if (state.catalog_id) {
-      formData.catalog_id = Number(state.catalog_id);
-    }
-
-    // Обработка категории
-    if (category.value.new && category.value.name) {
-      formData.category = { name: category.value.name };
-    } else if (state.category_id) {
-      formData.category_id = Number(state.category_id);
-    }
-
-    // Обработка производителя
-    if (manufacturer.value.new && manufacturer.value.name) {
-      formData.manufacturer = { name: manufacturer.value.name };
-    } else if (state.manufacturer_id) {
-      formData.manufacturer_id = Number(state.manufacturer_id);
-    }
-
     // Валидация данных
-    const validatedData = schema.parse(formData);
+    const validatedData = schema.parse(state);
 
-    // Создание FormData для отправки с файлами
-    const dataToSend = new FormData();
+    // Подготовка FormData
+    const formData = prepareFormData();
 
-    // Добавляем все поля кроме изображений
-    Object.entries(validatedData).forEach(([key, value]) => {
-      if (key === "dimensions") {
-        dataToSend.append(key, JSON.stringify(value));
-      } else if (
-        key === "catalog" ||
-        key === "category" ||
-        key === "manufacturer"
-      ) {
-        dataToSend.append(key, JSON.stringify(value));
-      } else if (value !== undefined && value !== null) {
-        dataToSend.append(key, String(value));
-      }
-    });
+    // Определяем URL и метод в зависимости от режима
+    let url = BACKEND_API.PRODUCT.CREATE;
+    let method = "POST";
 
-    // Добавляем изображения
-    images.value.forEach((file, index: number) => {
-      dataToSend.append("images", file);
-    });
+    if (isEditMode.value && props.productId) {
+      url = `${BACKEND_API.PRODUCT.GET_ONE}/${props.productId}`;
+      method = "PUT";
+    }
 
     // Отправка данных на сервер
-    const response = await fetch(BACKEND_API.PRODUCT.CREATE, {
-      method: "POST",
+    const response = await fetch(url, {
+      method,
       headers: {
         Authorization: `Bearer ${getCookie("token")}`,
       },
-      body: dataToSend,
+      body: formData,
     });
 
     if (response.ok) {
       // Сброс формы
-      Object.assign(state, {
-        name: undefined,
-        price: undefined,
-        description: undefined,
-        quantity: undefined,
-        catalog_id: undefined,
-        category_id: undefined,
-        manufacturer_id: undefined,
-        telegram_notification: true,
-        dimensions: {
-          lenght: 0,
-          width: 0,
-          height: 0,
-          depth: 0,
-        },
-        catalog: undefined,
-        category: undefined,
-        manufacturer: undefined,
-      });
+      resetForm();
 
-      images.value = [];
-      catalog.value = { id: undefined, name: undefined, new: false };
-      category.value = { id: undefined, name: undefined, new: false };
-      manufacturer.value = { id: undefined, name: undefined, new: false };
+      // Закрытие модального окна
+      isOpen.value = false;
 
-      // Закрытие модального окна и эмит события успеха
-      emit("update:open", false);
+      // Уведомление об успехе
       emit("success");
-      console.log("Товар успешно добавлен");
+      emit("refresh");
+
+      // Показываем уведомление
+      showNotification(
+        "success",
+        isEditMode.value ? "Товар успешно обновлен" : "Товар успешно добавлен"
+      );
     } else {
       const error = await response.json();
-      console.error("Ошибка при добавлении товара:", error);
+      throw new Error(error.message || "Ошибка при сохранении товара");
     }
-  } catch (validationError) {
-    if (validationError instanceof z.ZodError) {
-      console.error("Ошибка валидации:", validationError);
-    } else {
-      console.error("Ошибка:", validationError);
-    }
+  } catch (error) {
+    console.error("Ошибка:", error);
+    showNotification(
+      "error",
+      error instanceof Error ? error.message : "Произошла ошибка при сохранении"
+    );
   } finally {
     loading.value = false;
   }
 }
 
-// Обработчик открытия
-async function onOpen(value: boolean) {
-  if (value) {
-    await loadOptions();
-  }
+// Функция для показа уведомлений
+function showNotification(type: "success" | "error", message: string) {
+  // Здесь можно использовать ваш UI компонент для уведомлений
+  const event = new CustomEvent("show-notification", {
+    detail: { type, message },
+  });
+  window.dispatchEvent(event);
 }
 
 // Обработчик отмены
 function onCancel() {
-  emit("update:open", false);
+  resetForm();
+  isOpen.value = false;
 }
 </script>
 
 <template>
   <UModal
-    title="Создать товар"
-    description="Форма добавления товара"
+    v-model:open="isOpen"
+    :title="modalTitle"
+    :description="
+      isEditMode ? 'Форма редактирования товара' : 'Форма добавления товара'
+    "
     :ui="{ width: 'sm:max-w-lg' }"
-    @update:open="onOpen"
   >
-    <UButton label="Добавить товар" icon="i-lucide-plus" />
     <template #body>
-      <UForm
-        ref="form"
-        :schema="schema"
-        :state="state"
-        class="space-y-4"
-        @submit="onSubmit"
-      >
+      <UForm ref="form" :state="state" class="space-y-4" @submit="onSubmit">
         <!-- Основные поля -->
         <UFormField label="Название" name="name" required>
           <UInput
@@ -390,119 +473,110 @@ function onCancel() {
         </UFormField>
 
         <!-- Выпадающие списки -->
-        <div class="flex" style="flex-direction: column">
-          <UFormField
-            class="w-full mb-2"
-            label="Каталог"
-            name="catalog_id"
-            required
-          >
-            <UInput
-              v-if="catalog.new"
-              v-model="catalog.name"
-              placeholder="Введите название каталога"
-              class="w-full mb-2"
-              :disabled="loading"
-            />
-            <USelect
-              v-else
-              v-model="state.catalog_id"
-              class="w-full mb-2"
-              :items="
-                catalogs.map((catalog) => ({
-                  label: catalog.name,
-                  value: catalog.id,
-                }))
-              "
-              placeholder="Выберите каталог"
-              :disabled="loading"
-              :loading="loading"
-            />
-            <USwitch
-              v-model="catalog.new"
-              label="Новый каталог"
-              description="Добавить новый каталог"
-              size="sm"
-              color="neutral"
-              unchecked-icon="i-lucide-x"
-              checked-icon="i-lucide-check"
-            />
+        <div class="space-y-4">
+          <UFormField label="Каталог" name="catalog_id" required>
+            <div class="space-y-2">
+              <UInput
+                v-if="catalog.new"
+                v-model="catalog.name"
+                placeholder="Введите название каталога"
+                class="w-full"
+                :disabled="loading"
+              />
+              <USelect
+                v-else
+                v-model="state.catalog_id"
+                class="w-full"
+                :items="
+                  catalogs.map((catalog) => ({
+                    label: catalog.name,
+                    value: catalog.id,
+                  }))
+                "
+                placeholder="Выберите каталог"
+                :disabled="loading"
+                :loading="loading"
+              />
+              <USwitch
+                v-model="catalog.new"
+                label="Новый каталог"
+                description="Добавить новый каталог"
+                size="sm"
+                color="neutral"
+                unchecked-icon="i-lucide-x"
+                checked-icon="i-lucide-check"
+              />
+            </div>
           </UFormField>
 
-          <UFormField
-            class="w-full mb-2"
-            label="Категория"
-            name="category_id"
-            required
-          >
-            <UInput
-              v-if="category.new"
-              v-model="category.name"
-              placeholder="Введите название категории"
-              class="w-full mb-2"
-              :disabled="loading"
-            />
-            <USelect
-              v-else
-              v-model="state.category_id"
-              class="w-full mb-2"
-              :items="
-                categories.map((category) => ({
-                  label: category.name,
-                  value: category.id,
-                }))
-              "
-              placeholder="Выберите категорию"
-              :disabled="loading"
-              :loading="loading"
-            />
-            <USwitch
-              v-model="category.new"
-              label="Новая категория"
-              description="Добавить новую категорию"
-              size="sm"
-              color="neutral"
-              unchecked-icon="i-lucide-x"
-              checked-icon="i-lucide-check"
-            />
+          <UFormField label="Категория" name="category_id" required>
+            <div class="space-y-2">
+              <UInput
+                v-if="category.new"
+                v-model="category.name"
+                placeholder="Введите название категории"
+                class="w-full"
+                :disabled="loading"
+              />
+              <USelect
+                v-else
+                v-model="state.category_id"
+                class="w-full"
+                :items="
+                  categories.map((category) => ({
+                    label: category.name,
+                    value: category.id,
+                  }))
+                "
+                placeholder="Выберите категорию"
+                :disabled="loading"
+                :loading="loading"
+              />
+              <USwitch
+                v-model="category.new"
+                label="Новая категория"
+                description="Добавить новую категорию"
+                size="sm"
+                color="neutral"
+                unchecked-icon="i-lucide-x"
+                checked-icon="i-lucide-check"
+              />
+            </div>
           </UFormField>
 
-          <UFormField
-            class="w-full mb-2"
-            label="Производитель"
-            name="manufacturer_id"
-            required
-          >
-            <UInput
-              v-if="manufacturer.new"
-              v-model="manufacturer.name"
-              placeholder="Введите название производителя"
-              class="w-full mb-2"
-              :disabled="loading"
-            />
-            <USelect
-              v-else
-              v-model="state.manufacturer_id"
-              class="w-full mb-2"
-              :items="
-                manufacturers.map((manufacturer) => ({
-                  label: manufacturer.name,
-                  value: manufacturer.id,
-                }))
-              "
-              placeholder="Выберите производителя"
-              :disabled="loading"
-              :loading="loading"
-            />
-            <USwitch
-              v-model="manufacturer.new"
-              label="Новый производитель"
-              description="Добавить нового производителя"
-              size="sm"
-              color="neutral"
-              unchecked-icon="i-lucide-x"
-              checked-icon="i-lucide-check"
-            />
+          <UFormField label="Производитель" name="manufacturer_id" required>
+            <div class="space-y-2">
+              <UInput
+                v-if="manufacturer.new"
+                v-model="manufacturer.name"
+                placeholder="Введите название производителя"
+                class="w-full"
+                :disabled="loading"
+              />
+              <USelect
+                v-else
+                v-model="state.manufacturer_id"
+                class="w-full"
+                :items="
+                  manufacturers.map((manufacturer) => ({
+                    label: manufacturer.name,
+                    value: manufacturer.id,
+                  }))
+                "
+                placeholder="Выберите производителя"
+                :disabled="loading"
+                :loading="loading"
+              />
+              <USwitch
+                v-model="manufacturer.new"
+                label="Новый производитель"
+                description="Добавить нового производителя"
+                size="sm"
+                color="neutral"
+                unchecked-icon="i-lucide-x"
+                checked-icon="i-lucide-check"
+              />
+            </div>
           </UFormField>
         </div>
 
@@ -512,7 +586,7 @@ function onCancel() {
           <div class="grid grid-cols-2 gap-4">
             <UFormField label="Длина (мм)" name="dimensions.lenght" required>
               <UInput
-                v-model="state.dimensions.lenght"
+                v-model="state.dimensions.length"
                 type="number"
                 placeholder="0"
                 step="1"
@@ -559,7 +633,7 @@ function onCancel() {
                 v-model="state.dimensions.weight"
                 type="number"
                 placeholder="0"
-                step="1"
+                step="0.1"
                 min="0"
                 :disabled="loading"
               />
@@ -567,9 +641,41 @@ function onCancel() {
           </div>
         </div>
 
-        <!-- Рисунки -->
-        <div class="flex" style="flex-direction: column">
-          <p class="text-md font-sm text-weight-600 mb-1">Рисунки товара</p>
+        <!-- Существующие изображения (только в режиме редактирования) -->
+        <div v-if="isEditMode && existingImages.length > 0" class="space-y-2">
+          <p class="text-sm font-medium text-gray-700">
+            Существующие изображения
+          </p>
+          <div class="grid grid-cols-3 gap-2">
+            <div
+              v-for="image in existingImages"
+              :key="image.id"
+              class="relative group"
+            >
+              <img
+                :src="image.url"
+                :alt="state.name"
+                class="w-full h-24 object-cover rounded-lg"
+              />
+              <UButton
+                icon="i-lucide-trash"
+                color="error"
+                variant="solid"
+                size="xs"
+                class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                @click="deleteExistingImage(image.id)"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Новые изображения -->
+        <div class="space-y-2">
+          <p class="text-sm font-medium text-gray-700">
+            {{
+              isEditMode ? "Добавить новые изображения" : "Изображения товара"
+            }}
+          </p>
           <UFileUpload
             v-model="images"
             multiple
@@ -577,9 +683,13 @@ function onCancel() {
             layout="grid"
             :interactive="false"
             icon="i-lucide-image"
-            label="Загрузите картинки сюда"
+            :label="
+              isEditMode
+                ? 'Добавьте новые изображения'
+                : 'Загрузите картинки сюда'
+            "
             description="SVG, PNG, JPG или GIF (макс. 4MB)"
-            class="w-100"
+            class="w-full"
           >
             <template #actions="{ open }">
               <UButton
@@ -596,8 +706,9 @@ function onCancel() {
                 v-if="images.length"
                 class="mb-2 flex items-center justify-between"
               >
-                <p class="font-bold">Кол-во картинок ({{ images.length }})</p>
-
+                <p class="font-bold">
+                  Кол-во новых картинок ({{ images.length }})
+                </p>
                 <UButton
                   icon="i-lucide-plus"
                   label="Добавить еще"
@@ -616,7 +727,7 @@ function onCancel() {
           <USwitch
             v-model="state.telegram_notification"
             label="Отправить уведомление"
-            description="Оповести о новом товаре в телеграм группу"
+            description="Оповестить о новом товаре в телеграм группу"
             size="sm"
             color="neutral"
             unchecked-icon="i-lucide-x"
@@ -631,9 +742,10 @@ function onCancel() {
             color="gray"
             variant="ghost"
             @click="onCancel"
+            :disabled="loading"
           />
           <UButton
-            label="Добавить товар"
+            :label="submitButtonText"
             color="primary"
             type="submit"
             :loading="loading"
@@ -644,3 +756,12 @@ function onCancel() {
     </template>
   </UModal>
 </template>
+
+<style scoped>
+.form :deep(.ui-input) input:focus,
+.form :deep(.ui-textarea) textarea:focus {
+  outline: none;
+  ring: 2px;
+  ring-color: var(--color-primary-500);
+}
+</style>
