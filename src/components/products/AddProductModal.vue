@@ -155,7 +155,7 @@ const imagesToDelete = ref<number[]>([]);
 async function loadOptions() {
   loading.value = true;
   try {
-    const [categoriesResponse, manufacturersResponse, catalogsResponse] =
+    const [categoriesResponse, catalogsResponse, manufacturersResponse] =
       await Promise.all([
         fetch(`${BACKEND_API.PRODUCT.CATEGORY.GET_ALL}?all=true`),
         fetch(`${BACKEND_API.PRODUCT.CATALOG.GET_ALL}?all=true`),
