@@ -40,7 +40,7 @@ const schema = z.object({
   description: z.string().optional(),
   telegram_notification: z.boolean().optional(),
   dimensions: z.object({
-    lenght: z
+    length: z
       .number({
         error: "Поле обязательно для заполнения",
       })
@@ -254,7 +254,7 @@ function resetForm() {
     description: "",
     telegram_notification: false,
     dimensions: {
-      lenght: 0,
+      length: 0,
       width: 0,
       height: 0,
       depth: 0,
@@ -358,9 +358,6 @@ async function onSubmit(event: Event) {
   loading.value = true;
 
   try {
-    // Валидация данных
-    const validatedData = schema.parse(state);
-
     // Подготовка FormData
     const formData = prepareFormData();
 
@@ -584,7 +581,7 @@ function onCancel() {
         <div class="border rounded-lg p-4 space-y-4">
           <p class="text-sm font-medium text-gray-700">Габариты товара</p>
           <div class="grid grid-cols-2 gap-4">
-            <UFormField label="Длина (мм)" name="dimensions.lenght" required>
+            <UFormField label="Длина (мм)" name="dimensions.length" required>
               <UInput
                 v-model="state.dimensions.length"
                 type="number"

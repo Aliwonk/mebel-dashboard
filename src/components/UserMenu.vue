@@ -34,10 +34,10 @@ const colorMode = useColorMode();
 // const neutrals = ["slate", "gray", "zinc", "neutral", "stone"];
 
 const user = ref({
-  name: "Балдан Айдыш",
+  name: "Администратор",
   avatar: {
     // src: "https://github.com/benjamincanac.png",
-    alt: "Балдан Айдыш",
+    alt: "Администратор",
   },
 });
 
@@ -47,7 +47,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
       type: "label",
       label: user.value.name,
       avatar: {
-        alt: "Балдан Айдыш",
+        alt: "Администратор",
       },
     },
   ],
