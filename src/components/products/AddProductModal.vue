@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { reactive, ref, watch, computed } from "vue";
-import z from "zod";
 import { getCookie } from "../../utils";
 import { BACKEND_API } from "../../constants/API.constant";
 import type { Product } from "../../types";
@@ -19,87 +18,18 @@ const emit = defineEmits<{
 const isOpen = defineModel<boolean>("open", { default: false });
 const isEditMode = computed(() => !!props.productId);
 const modalTitle = computed(() =>
-  isEditMode.value ? "Редактировать товар" : "Создать товар"
+  isEditMode.value ? "Редактировать товар" : "Создать товар",
 );
 const submitButtonText = computed(() =>
-  isEditMode.value ? "Сохранить изменения" : "Добавить товар"
+  isEditMode.value ? "Сохранить изменения" : "Добавить товар",
 );
-
-// Схема валидации
-const schema = z.object({
-  name: z
-    .string({
-      error: "Поле обязательно для заполнения",
-    })
-    .min(2, "Название слишком короткое"),
-  price: z
-    .number({
-      error: "Поле обязательно для заполнения",
-    })
-    .positive("Цена должна быть положительной"),
-  description: z.string().optional(),
-  telegram_notification: z.boolean().optional(),
-  dimensions: z.object({
-    length: z
-      .number({
-        error: "Поле обязательно для заполнения",
-      })
-      .nonnegative("Длина не может быть отрицательной")
-      .default(0),
-    width: z
-      .number({
-        error: "Поле обязательно для заполнения",
-      })
-      .nonnegative("Ширина не может быть отрицательной")
-      .default(0),
-    height: z
-      .number({
-        error: "Поле обязательно для заполнения",
-      })
-      .nonnegative("Высота не может быть отрицательной")
-      .default(0),
-    depth: z
-      .number({
-        error: "Поле обязательно для заполнения",
-      })
-      .nonnegative("Глубина не может быть отрицательной")
-      .default(0),
-    weight: z
-      .number({
-        error: "Поле обязательно для заполнения",
-      })
-      .nonnegative("Вес не может быть отрицательной")
-      .default(0),
-  }),
-  catalog_id: z
-    .number({
-      error: "Поле обязательно для заполнения",
-    })
-    .int("ID каталога должен быть целым числом")
-    .positive("ID каталога должен быть положительным")
-    .optional(),
-  category_id: z
-    .number({
-      error: "Поле обязательно для заполнения",
-    })
-    .int("ID категории должен быть целым числом")
-    .positive("ID категории должен быть положительным")
-    .optional(),
-  manufacturer_id: z
-    .number({
-      error: "Поле обязательно для заполнения",
-    })
-    .int("ID производителя должен быть целым числом")
-    .positive("ID производителя должен быть положительным")
-    .optional(),
-});
 
 // Инициализация состояния
 const state = reactive({
   name: "",
   price: 0,
   description: "",
-  telegram_notification: false,
+  telegram_notification: true,
   dimensions: {
     length: 0,
     width: 0,
@@ -196,7 +126,7 @@ async function loadProductData(productId: number) {
       state.name = product.name;
       state.price = Number(product.price);
       state.description = product.description || "";
-      state.telegram_notification = product.telegram_notification || false;
+      state.telegram_notification = product.telegram_notification || true;
       state.dimensions =
         product.dimensions && product.dimensions.length > 0
           ? product.dimensions[0]
@@ -252,7 +182,7 @@ function resetForm() {
     name: "",
     price: 0,
     description: "",
-    telegram_notification: false,
+    telegram_notification: true,
     dimensions: {
       length: 0,
       width: 0,
@@ -290,7 +220,7 @@ watch(isOpen, async (value) => {
 function deleteExistingImage(imageId: number) {
   imagesToDelete.value.push(imageId);
   existingImages.value = existingImages.value.filter(
-    (img) => img.id !== imageId
+    (img) => img.id !== imageId,
   );
 }
 
@@ -306,7 +236,7 @@ function prepareFormData() {
   }
   formData.append(
     "telegram_notification",
-    state.telegram_notification.toString()
+    state.telegram_notification.toString(),
   );
 
   // Габариты
@@ -341,7 +271,7 @@ function prepareFormData() {
   if (manufacturer.value.new && manufacturer.value.name) {
     formData.append(
       "manufacturer",
-      JSON.stringify({ name: manufacturer.value.name })
+      JSON.stringify({ name: manufacturer.value.name }),
     );
   }
 
@@ -393,7 +323,7 @@ async function onSubmit(event: Event) {
       // Показываем уведомление
       showNotification(
         "success",
-        isEditMode.value ? "Товар успешно обновлен" : "Товар успешно добавлен"
+        isEditMode.value ? "Товар успешно обновлен" : "Товар успешно добавлен",
       );
     } else {
       const error = await response.json();
@@ -403,7 +333,9 @@ async function onSubmit(event: Event) {
     console.error("Ошибка:", error);
     showNotification(
       "error",
-      error instanceof Error ? error.message : "Произошла ошибка при сохранении"
+      error instanceof Error
+        ? error.message
+        : "Произошла ошибка при сохранении",
     );
   } finally {
     loading.value = false;
@@ -723,6 +655,7 @@ function onCancel() {
         <UFormField label="Уведомления телеграм" name="telegram_notification">
           <USwitch
             v-model="state.telegram_notification"
+            :default-value="true"
             label="Отправить уведомление"
             description="Оповестить о новом товаре в телеграм группу"
             size="sm"
