@@ -1,5 +1,5 @@
-// const SERVER_URL: string = "https://api.mebelmodnostilno.ru/api";
-const SERVER_URL: string = "http://localhost:3000/api";
+const SERVER_URL: string = "https://api.mebelmodnostilno.ru/api";
+// const SERVER_URL: string = "http://localhost:3000/api";
 const BACKEND_API = {
   ADMIN: {
     CREATE: `${SERVER_URL}/auth/register`,
